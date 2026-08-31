@@ -1,14 +1,15 @@
 # @rahularya01/opencode-cursor
 
-Unofficial Cursor provider package for OpenCode. It requires an authorized Cursor account and
-never writes credentials to the project. Configure `CURSOR_ACCESS_TOKEN` outside source control.
+Unofficial Cursor provider package for OpenCode. Run `/connect`, choose Cursor, and complete the
+browser login. OpenCode stores and refreshes the resulting OAuth credential outside the project.
 
 ```json
 {
-  "plugin": ["@rahularya01/opencode-cursor/plugin/v2"],
+  "plugin": ["@rahularya01/opencode-cursor/plugin/auth", "@rahularya01/opencode-cursor/plugin/v2"],
   "provider": {
     "cursor": {
-      "api": { "type": "aisdk", "package": "@rahularya01/opencode-cursor" },
+      "name": "Cursor",
+      "npm": "@rahularya01/opencode-cursor",
       "models": { "composer-2": { "name": "Composer 2" } }
     }
   }

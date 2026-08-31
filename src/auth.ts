@@ -1,7 +1,16 @@
+import {
+  isRefreshKnownBad,
+  markRefreshFailed,
+  markRefreshSucceeded,
+} from './auth/refresh-guard.js';
+
 /** Explicit environment credentials take precedence over local application state. */
 export function resolveCursorToken(options: { apiKey?: string }): string {
   const token = options.apiKey ?? process.env.CURSOR_ACCESS_TOKEN;
-  if (!token) throw new Error('No Cursor credential. Set CURSOR_ACCESS_TOKEN or configure apiKey.');
+  if (!token)
+    throw new Error(
+      'No Cursor credential. Run /connect and choose Cursor, or set CURSOR_ACCESS_TOKEN.',
+    );
   return token;
 }
 
@@ -78,8 +87,10 @@ export async function beginCursorLogin(): Promise<{
     },
   };
 }
-
 export async function refreshCursorToken(refresh: string): Promise<CursorOAuthCredentials> {
+  if (isRefreshKnownBad(refresh)) {
+    throw new Error('Cursor token refresh recently failed; wait before retrying /connect.');
+  }
   const response = await fetch(REFRESH_URL, {
     method: 'POST',
     headers: { authorization: `Bearer ${refresh}`, 'content-type': 'application/json' },
@@ -87,10 +98,15 @@ export async function refreshCursorToken(refresh: string): Promise<CursorOAuthCr
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
+    markRefreshFailed(refresh);
     throw new Error(`Cursor token refresh failed: ${redactSecrets(await response.text())}`);
   }
   const data = (await response.json()) as { accessToken?: string; refreshToken?: string };
-  if (!data.accessToken) throw new Error('Cursor token refresh returned no access token');
+  if (!data.accessToken) {
+    markRefreshFailed(refresh);
+    throw new Error('Cursor token refresh returned no access token');
+  }
+  markRefreshSucceeded(refresh);
   return {
     access: data.accessToken,
     refresh: data.refreshToken || refresh,

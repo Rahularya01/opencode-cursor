@@ -1,7 +1,10 @@
 # @rahularya01/opencode-cursor
 
-Unofficial Cursor provider package for OpenCode. Run `/connect`, choose Cursor, and complete the
-browser login. OpenCode stores and refreshes the resulting OAuth credential outside the project.
+Unofficial Cursor provider for OpenCode. Run `/connect`, choose Cursor, and complete browser
+login. OpenCode stores and refreshes the OAuth credential. This package does not harvest
+Cursor IDE or Keychain tokens.
+
+> Unofficial integration. Not affiliated with or endorsed by Cursor / Anysphere.
 
 ```json
 {
@@ -9,12 +12,11 @@ browser login. OpenCode stores and refreshes the resulting OAuth credential outs
   "provider": {
     "cursor": {
       "name": "Cursor",
-      "npm": "@rahularya01/opencode-cursor",
-      "models": { "composer-2": { "name": "Composer 2" } }
+      "npm": "@rahularya01/opencode-cursor"
     }
   }
 }
 ```
 
-The package has the OpenCode registration and credential boundary in place. Its native Cursor
-Connect/protobuf protocol port must be completed before this initial package is published.
+Streaming uses Cursor's native Connect/protobuf protocol over HTTP/2. OpenCode owns
+conversation history and tool execution; this package maps those onto Cursor's wire format.

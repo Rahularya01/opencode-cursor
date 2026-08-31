@@ -2,12 +2,12 @@ import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
   LanguageModelV3GenerateResult,
-  LanguageModelV3StreamPart,
   LanguageModelV3StreamResult,
   LanguageModelV3Usage,
 } from '@ai-sdk/provider';
 import { resolveCursorToken } from './auth.js';
 import { PROVIDER_ID } from './models.js';
+import { runCursorConnectStream } from './stream/run.js';
 
 export type CursorOptions = { apiKey?: string; agentBaseURL?: string };
 const emptyUsage: LanguageModelV3Usage = {
@@ -21,9 +21,8 @@ const emptyUsage: LanguageModelV3Usage = {
 };
 
 /**
- * OpenCode-facing Cursor model boundary. The Connect/protobuf session belongs here so host plugin
- * code never sees a Cursor credential or a protocol frame. The current server rejects requests
- * until the generated Cursor wire schema is linked in the follow-up protocol port.
+ * OpenCode-facing Cursor model boundary. Connect/protobuf stays inside this class so host
+ * plugin code never sees a Cursor credential or a protocol frame.
  */
 export class CursorLanguageModel implements LanguageModelV3 {
   readonly specificationVersion = 'v3' as const;
@@ -35,39 +34,40 @@ export class CursorLanguageModel implements LanguageModelV3 {
     private readonly options: CursorOptions,
   ) {}
 
-  async doGenerate(_options: LanguageModelV3CallOptions): Promise<LanguageModelV3GenerateResult> {
-    const streamed = await this.doStream(_options);
+  async doGenerate(options: LanguageModelV3CallOptions): Promise<LanguageModelV3GenerateResult> {
+    const streamed = await this.doStream(options);
     let text = '';
+    const toolCalls: LanguageModelV3GenerateResult['content'] = [];
+    let finishReason: LanguageModelV3GenerateResult['finishReason'] = {
+      unified: 'stop',
+      raw: undefined,
+    };
+    let usage = emptyUsage;
     const reader = streamed.stream.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (value.type === 'text-delta') text += value.delta;
+      if (value.type === 'tool-call') toolCalls.push(value);
+      if (value.type === 'finish') {
+        finishReason = value.finishReason;
+        usage = value.usage;
+      }
     }
     return {
-      content: text ? [{ type: 'text', text }] : [],
-      finishReason: { unified: 'stop', raw: undefined },
-      usage: emptyUsage,
+      content: [...(text ? [{ type: 'text' as const, text }] : []), ...toolCalls],
+      finishReason,
+      usage,
       warnings: [],
     };
   }
 
-  async doStream(_options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> {
-    void _options;
-    resolveCursorToken(this.options);
-    const endpoint =
-      this.options.agentBaseURL ??
-      process.env.CURSOR_AGENT_URL ??
-      'https://agentn.us.api5.cursor.sh';
-    const error = new Error(
-      `Cursor Connect transport is not linked in this build (endpoint ${new URL(endpoint).origin}).`,
-    );
-    const stream = new ReadableStream<LanguageModelV3StreamPart>({
-      start(controller) {
-        controller.enqueue({ type: 'stream-start', warnings: [] });
-        controller.enqueue({ type: 'error', error });
-        controller.error(error);
-      },
+  async doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> {
+    const accessToken = resolveCursorToken(this.options);
+    const stream = runCursorConnectStream({
+      accessToken,
+      modelId: this.modelId,
+      options,
     });
     return { stream };
   }
